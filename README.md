@@ -4,6 +4,16 @@ Use Rohrpost when you want to turn raw website, webhook, NATS, or Kafka events i
 
 Rohrpost is currently a Bun workspace with a local self-hosted stack. It is built around explicit delivery semantics: at-least-once delivery, per-partition ordering only, possible duplicates, and retries only for idempotent sinks.
 
+## Agentic Shortcut
+
+If you use an agent that supports [skills.sh](https://skills.sh), install the Rohrpost skill and ask it to run the local test drive or create flows for you:
+
+```bash
+npx skills add vorcigernix/rohrpost --skill rohrpost
+```
+
+That skill is a shortcut for the manual scenarios below. It guides agents through Docker + kind setup, uses the known localhost ports, and calls the control API to draft, validate, save, and publish flows.
+
 ## Start Locally
 
 Install dependencies:
@@ -186,12 +196,6 @@ curl -s http://127.0.0.1:3001/api/flows/draft-from-prompt \
   -H 'authorization: Bearer dev-admin-token' \
   -H 'content-type: application/json' \
   -d '{"prompt":"Send website purchase events to S3","samplePayload":{"event":"purchase","total":42}}'
-```
-
-For agent-based authoring, install the bundled skill:
-
-```bash
-npx skills add vorcigernix/rohrpost --skill rohrpost
 ```
 
 ## Integrations
