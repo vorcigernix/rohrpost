@@ -1,0 +1,124 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: runtime-manager
+  labels:
+    app.kubernetes.io/name: runtime-manager
+    app.kubernetes.io/part-of: rohrpost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: runtime-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: runtime-manager
+        app.kubernetes.io/part-of: rohrpost
+    spec:
+      initContainers:
+        - name: wait-for-control-api
+          image: rohrpost/runtime:dev-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - bun
+            - -e
+            - |
+              for (;;) {
+                try {
+                  const response = await fetch("http://control-api:3001/health");
+                  if (response.ok) process.exit(0);
+                } catch {}
+                await Bun.sleep(2_000);
+              }
+        - name: wait-for-router-workers
+          image: rohrpost/runtime:dev-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - bun
+            - -e
+            - |
+              for (;;) {
+                try {
+                  const response = await fetch("http://router-workers:3002/health");
+                  if (response.ok) process.exit(0);
+                } catch {}
+                await Bun.sleep(2_000);
+              }
+        - name: wait-for-adapter
+          image: rohrpost/runtime:dev-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - bun
+            - -e
+            - |
+              for (;;) {
+                try {
+                  const response = await fetch("http://adapter-redpanda:3003/health");
+                  if (response.ok) process.exit(0);
+                } catch {}
+                await Bun.sleep(2_000);
+              }
+      containers:
+        - name: runtime-manager
+          image: rohrpost/runtime:dev-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - bun
+            - /app/apps/runtime-manager/src/index.ts
+          env:
+            - name: RUNTIME_MANAGER_HOST
+              value: 0.0.0.0
+            - name: RUNTIME_MANAGER_PORT
+              value: "7102"
+            - name: CONTROL_API_URL
+              value: http://control-api:3001
+            - name: CONTROL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: rohrpost-secrets
+                  key: BOOTSTRAP_API_TOKEN
+            - name: TENANT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: DEFAULT_TENANT_ID
+            - name: RUNTIME_MANAGER_ROUTER_WORKERS_URL
+              value: http://router-workers:3002
+            - name: RUNTIME_MANAGER_ADAPTER_REDPANDA_URL
+              value: http://adapter-redpanda:3003
+            - name: RUNTIME_MANAGER_REQUEST_TIMEOUT_MS
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: RUNTIME_MANAGER_REQUEST_TIMEOUT_MS
+          ports:
+            - name: http
+              containerPort: 7102
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runtime-manager
+  labels:
+    app.kubernetes.io/name: runtime-manager
+    app.kubernetes.io/part-of: rohrpost
+spec:
+  selector:
+    app.kubernetes.io/name: runtime-manager
+  ports:
+    - name: http
+      port: 7102
+      targetPort: http

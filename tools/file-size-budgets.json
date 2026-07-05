@@ -1,0 +1,41 @@
+{
+  "roots": [
+    "apps",
+    "packages",
+    "deploy/bin",
+    "tools"
+  ],
+  "extensions": [
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs"
+  ],
+  "ignoredSegments": [
+    "node_modules",
+    ".vite",
+    "dist",
+    "build",
+    "coverage"
+  ],
+  "thresholds": {
+    "review": 300,
+    "freeze": 500,
+    "hard": 800
+  },
+  "allowlist": {
+    "apps/router-workers/src/phase2-worker.ts": 1511,
+    "apps/router-workers/src/__tests__/phase2-worker.test.ts": 1372,
+    "apps/control-api/test/app.test.ts": 1098,
+    "apps/adapter-redpanda/src/connect-supervisor.ts": 1055,
+    "apps/console/src/pages/AuthoringPage.tsx": 1027,
+    "deploy/bin/soak-nats-transform-nats.ts": 972,
+    "apps/control-api/src/flows/transform-assistant.ts": 946,
+    "deploy/bin/soak-http-ingress.ts": 843,
+    "apps/control-api/src/repository/runtime-repository.ts": 743,
+    "apps/runtime-manager/test/reconciliation.test.ts": 531,
+    "apps/adapter-redpanda/src/runtime.ts": 517
+  }
+}

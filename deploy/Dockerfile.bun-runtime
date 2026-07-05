@@ -1,0 +1,6 @@
+FROM oven/bun:1
+
+WORKDIR /workspace
+
+ENV BUN_INSTALL_CACHE_DIR=/bun-cache
+

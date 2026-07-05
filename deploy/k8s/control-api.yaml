@@ -1,0 +1,117 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-api
+  labels:
+    app.kubernetes.io/name: control-api
+    app.kubernetes.io/part-of: rohrpost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: control-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: control-api
+        app.kubernetes.io/part-of: rohrpost
+    spec:
+      containers:
+        - name: control-api
+          image: rohrpost/runtime:dev-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - bun
+            - /app/apps/control-api/src/index.ts
+          env:
+            - name: CONTROL_API_HOST
+              value: 0.0.0.0
+            - name: CONTROL_API_PORT
+              value: "3001"
+            - name: CONTROL_API_DB_PATH
+              value: /data/control-plane.db
+            - name: CONTROL_API_RUN_SUMMARY_RETENTION_LIMIT
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: CONTROL_API_RUN_SUMMARY_RETENTION_LIMIT
+            - name: BOOTSTRAP_ADMIN_EMAIL
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: BOOTSTRAP_ADMIN_EMAIL
+            - name: BOOTSTRAP_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: rohrpost-secrets
+                  key: BOOTSTRAP_API_TOKEN
+            - name: DEFAULT_TENANT_ID
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: DEFAULT_TENANT_ID
+            - name: DEFAULT_TENANT_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: DEFAULT_TENANT_NAME
+            - name: ADAPTER_REDPANDA_URL
+              value: http://adapter-redpanda:3003
+          ports:
+            - name: http
+              containerPort: 3001
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: control-api-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-api
+  labels:
+    app.kubernetes.io/name: control-api
+    app.kubernetes.io/part-of: rohrpost
+spec:
+  selector:
+    app.kubernetes.io/name: control-api
+  ports:
+    - name: http
+      port: 3001
+      targetPort: http
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: control-api-data
+  labels:
+    app.kubernetes.io/name: control-api
+    app.kubernetes.io/part-of: rohrpost
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

@@ -1,0 +1,35 @@
+services:
+  console:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.bun-runtime
+    init: true
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+    working_dir: /workspace
+    volumes:
+      - ..:/workspace
+      - bun-cache:/bun-cache
+    environment:
+      NODE_ENV: development
+      BUN_INSTALL_CACHE_DIR: /bun-cache
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:3001}
+      VITE_API_TOKEN: ${BOOTSTRAP_API_TOKEN:-dev-admin-token}
+      VITE_USE_MOCK_API: "false"
+      PORT: ${CONSOLE_PORT:-3000}
+    depends_on:
+      - control-api
+    ports:
+      - "${CONSOLE_PORT:-3000}:3000"
+    command:
+      - sh
+      - /workspace/deploy/bin/run-bun-service.sh
+      - bun
+      - --cwd
+      - /workspace/apps/console
+      - run
+      - dev
+      - --
+      - --host
+      - 0.0.0.0

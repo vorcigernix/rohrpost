@@ -1,0 +1,227 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: adapter-redpanda
+  labels:
+    app.kubernetes.io/name: adapter-redpanda
+    app.kubernetes.io/part-of: rohrpost
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: adapter-redpanda-connect
+  labels:
+    app.kubernetes.io/name: redpanda-connect
+    app.kubernetes.io/component: adapter-workload
+    app.kubernetes.io/part-of: rohrpost
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: adapter-redpanda-artifacts
+  labels:
+    app.kubernetes.io/name: adapter-redpanda
+    app.kubernetes.io/component: adapter-artifacts
+    app.kubernetes.io/part-of: rohrpost
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: adapter-redpanda-workload-controller
+  labels:
+    app.kubernetes.io/name: adapter-redpanda
+    app.kubernetes.io/part-of: rohrpost
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: adapter-redpanda-workload-controller
+  labels:
+    app.kubernetes.io/name: adapter-redpanda
+    app.kubernetes.io/part-of: rohrpost
+subjects:
+  - kind: ServiceAccount
+    name: adapter-redpanda
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: adapter-redpanda-workload-controller
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adapter-redpanda
+  labels:
+    app.kubernetes.io/name: adapter-redpanda
+    app.kubernetes.io/part-of: rohrpost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: adapter-redpanda
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: adapter-redpanda
+        app.kubernetes.io/part-of: rohrpost
+    spec:
+      serviceAccountName: adapter-redpanda
+      initContainers:
+        - name: wait-for-control-api
+          image: rohrpost/runtime:dev-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - bun
+            - -e
+            - |
+              for (;;) {
+                try {
+                  const response = await fetch("http://control-api:3001/health");
+                  if (response.ok) process.exit(0);
+                } catch {}
+                await Bun.sleep(2_000);
+              }
+        - name: wait-for-nats
+          image: rohrpost/runtime:dev-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - bun
+            - -e
+            - |
+              for (;;) {
+                try {
+                  const response = await fetch("http://nats:8222/healthz");
+                  if (response.ok) process.exit(0);
+                } catch {}
+                await Bun.sleep(2_000);
+              }
+        - name: wait-for-streams
+          image: rohrpost/nats-box:dev-local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: NATS_URL
+          command:
+            - /bin/sh
+            - -lc
+            - |
+              set -eu
+              until nats --server "$NATS_URL" stream info work --no-select >/dev/null 2>&1; do
+                sleep 2
+              done
+      containers:
+        - name: adapter-redpanda
+          image: rohrpost/runtime:dev-local
+          imagePullPolicy: IfNotPresent
+          command:
+            - bun
+            - /app/apps/adapter-redpanda/src/index.ts
+          env:
+            - name: ADAPTER_REDPANDA_HOST
+              value: 0.0.0.0
+            - name: ADAPTER_REDPANDA_PORT
+              value: "3003"
+            - name: ADAPTER_REDPANDA_NATS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: NATS_URL
+            - name: ADAPTER_REDPANDA_CONTROL_API_URL
+              value: http://control-api:3001
+            - name: ADAPTER_REDPANDA_CONTROL_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: rohrpost-secrets
+                  key: BOOTSTRAP_API_TOKEN
+            - name: ADAPTER_REDPANDA_DELIVERY_LOG_PATH
+              value: /data/adapter-deliveries.jsonl
+            - name: ADAPTER_REDPANDA_DELIVERY_LOG_ENABLED
+              value: "false"
+            - name: ADAPTER_REDPANDA_ARTIFACT_ROOT
+              value: /data/adapter-artifacts
+            - name: REDPANDA_CONNECT_IMAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: REDPANDA_CONNECT_IMAGE
+            - name: MANIFEST_SOURCE
+              valueFrom:
+                configMapKeyRef:
+                  name: rohrpost-config
+                  key: MANIFEST_SOURCE
+            - name: ADAPTER_REDPANDA_CONNECT_BACKEND
+              value: kubernetes
+            - name: ADAPTER_REDPANDA_CONNECT_K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: ADAPTER_REDPANDA_CONNECT_K8S_SERVICE_ACCOUNT_NAME
+              value: adapter-redpanda-connect
+            - name: ADAPTER_REDPANDA_CONNECT_K8S_CONFIGMAP_PREFIX
+              value: redpanda-connect
+            - name: ADAPTER_REDPANDA_CONNECT_K8S_DEPLOYMENT_PREFIX
+              value: redpanda-connect
+            - name: ADAPTER_REDPANDA_CONNECT_K8S_IMAGE_PULL_POLICY
+              value: IfNotPresent
+            - name: ADAPTER_REDPANDA_CONNECT_K8S_ARTIFACT_PVC_NAME
+              value: adapter-redpanda-artifacts
+          ports:
+            - name: http
+              containerPort: 3003
+          readinessProbe:
+            httpGet:
+              path: /status
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: artifacts
+              mountPath: /data/adapter-artifacts
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: artifacts
+          persistentVolumeClaim:
+            claimName: adapter-redpanda-artifacts
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: adapter-redpanda
+  labels:
+    app.kubernetes.io/name: adapter-redpanda
+    app.kubernetes.io/part-of: rohrpost
+spec:
+  selector:
+    app.kubernetes.io/name: adapter-redpanda
+  ports:
+    - name: http
+      port: 3003
+      targetPort: http

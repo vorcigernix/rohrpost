@@ -1,0 +1,10 @@
+node_modules
+.git
+.DS_Store
+data
+dist
+tmp
+coverage
+.env
+deploy/.env
+apps/*/dist

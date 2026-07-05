@@ -1,0 +1,209 @@
+name: event-router-platform
+
+x-bun-service: &bun-service
+  image: oven/bun:1
+  init: true
+  restart: unless-stopped
+  tty: true
+  stdin_open: true
+  working_dir: /workspace
+  volumes:
+    - ..:/workspace
+    - bun-cache:/bun-cache
+    - control-data:/data
+  environment:
+    NODE_ENV: development
+    BUN_INSTALL_CACHE_DIR: /bun-cache
+    NATS_URL: ${NATS_URL:-nats://nats:4222}
+    WORKSPACE_DIR: /workspace
+
+services:
+  nats:
+    image: nats:2
+    command:
+      - -c
+      - /etc/nats/nats-server.conf
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+      - ./nats/nats-server.conf:/etc/nats/nats-server.conf:ro
+    restart: unless-stopped
+
+  nats-bootstrap:
+    image: natsio/nats-box
+    profiles:
+      - bootstrap
+    depends_on:
+      - nats
+    entrypoint:
+      - /bin/sh
+      - /bootstrap/bootstrap.sh
+    environment:
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+    volumes:
+      - ./nats/bootstrap.sh:/bootstrap/bootstrap.sh:ro
+    restart: "no"
+
+  control-api:
+    <<: *bun-service
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.bun-runtime
+    command:
+      - sh
+      - /workspace/deploy/bin/run-bun-service.sh
+      - bun
+      - --cwd
+      - /workspace/apps/control-api
+      - run
+      - dev
+    depends_on:
+      - nats
+    ports:
+      - "${CONTROL_API_PORT:-3001}:3001"
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    environment:
+      CONTROL_API_HOST: 0.0.0.0
+      CONTROL_API_PORT: ${CONTROL_API_PORT:-3001}
+      CONTROL_API_DB_PATH: /data/control-plane.sqlite
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-admin@local.rohrpost}
+      BOOTSTRAP_API_TOKEN: ${BOOTSTRAP_API_TOKEN:-dev-admin-token}
+      DEFAULT_TENANT_ID: ${DEFAULT_TENANT_ID:-tenant_demo}
+      DEFAULT_TENANT_NAME: ${DEFAULT_TENANT_NAME:-Demo Tenant}
+      ADAPTER_REDPANDA_URL: http://adapter-redpanda:3003
+
+  runtime-manager:
+    <<: *bun-service
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.bun-runtime
+    command:
+      - sh
+      - /workspace/deploy/bin/run-bun-service.sh
+      - bun
+      - --cwd
+      - /workspace/apps/runtime-manager
+      - run
+      - dev
+    depends_on:
+      nats:
+        condition: service_started
+      control-api:
+        condition: service_healthy
+      router-workers:
+        condition: service_healthy
+      adapter-redpanda:
+        condition: service_healthy
+    ports:
+      - "${RUNTIME_MANAGER_PORT:-3002}:3002"
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - fetch('http://127.0.0.1:3002/ready').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    environment:
+      RUNTIME_MANAGER_HOST: 0.0.0.0
+      RUNTIME_MANAGER_PORT: ${RUNTIME_MANAGER_PORT:-3002}
+      CONTROL_API_URL: http://control-api:3001
+      CONTROL_API_TOKEN: ${BOOTSTRAP_API_TOKEN:-dev-admin-token}
+      RUNTIME_MANAGER_ROUTER_WORKERS_URL: http://router-workers:3002
+      RUNTIME_MANAGER_ADAPTER_REDPANDA_URL: http://adapter-redpanda:3003
+      RUNTIME_MANAGER_REQUEST_TIMEOUT_MS: ${RUNTIME_MANAGER_REQUEST_TIMEOUT_MS:-3000}
+      TENANT_ID: ${DEFAULT_TENANT_ID:-tenant_demo}
+
+  router-workers:
+    <<: *bun-service
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.bun-runtime
+    command:
+      - sh
+      - /workspace/deploy/bin/run-bun-service.sh
+      - bun
+      - --cwd
+      - /workspace/apps/router-workers
+      - run
+      - dev
+    depends_on:
+      nats:
+        condition: service_started
+      control-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - fetch('http://127.0.0.1:3002/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    environment:
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      CONTROL_API_URL: http://control-api:3001
+      CONTROL_API_TOKEN: ${BOOTSTRAP_API_TOKEN:-dev-admin-token}
+      WORKER_ID: router-workers-local
+      WORKER_CONCURRENCY: "4"
+      TENANT_ID: ${DEFAULT_TENANT_ID:-tenant_demo}
+
+  adapter-redpanda:
+    <<: *bun-service
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.bun-runtime
+    command:
+      - sh
+      - /workspace/deploy/bin/run-bun-service.sh
+      - bun
+      - --cwd
+      - /workspace/apps/adapter-redpanda
+      - run
+      - dev
+    depends_on:
+      nats:
+        condition: service_started
+      control-api:
+        condition: service_healthy
+    ports:
+      - "${ADAPTER_REDPANDA_PORT:-3003}:3003"
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - fetch('http://127.0.0.1:3003/status').then(async (r)=>{const j=await r.json();process.exit(r.ok&&j.runtime?.connected===true?0:1)}).catch(()=>process.exit(1))
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    environment:
+      ADAPTER_REDPANDA_HOST: 0.0.0.0
+      ADAPTER_REDPANDA_PORT: ${ADAPTER_REDPANDA_PORT:-3003}
+      ADAPTER_REDPANDA_NATS_URL: ${NATS_URL:-nats://nats:4222}
+      ADAPTER_REDPANDA_CONTROL_API_URL: http://control-api:3001
+      ADAPTER_REDPANDA_CONTROL_API_TOKEN: ${BOOTSTRAP_API_TOKEN:-dev-admin-token}
+      ADAPTER_REDPANDA_DELIVERY_LOG_PATH: /data/adapter-deliveries.jsonl
+      REDPANDA_CONNECT_IMAGE: ${REDPANDA_CONNECT_IMAGE:-docker.redpanda.com/redpandadata/connect:latest}
+      MANIFEST_SOURCE: ${MANIFEST_SOURCE:-compose}
+
+volumes:
+  nats-data:
+  control-data:
+  bun-cache:

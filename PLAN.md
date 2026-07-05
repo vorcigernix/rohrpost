@@ -1,0 +1,224 @@
+# Event Router Platform v1 Plan
+
+## Summary
+
+- Build this as a **separate greenfield product** in its own directory/repo.
+- v1 is a **self-hosted event routing and transformation platform** with a management console, AI-assisted flow authoring, reliable delivery, replay, and observability.
+- Detailed observability must be **OTEL-first**:
+  - traces, metrics, and logs flow to external observability tooling
+  - the console only shows health, rollout posture, and transformation mapping
+- Use **Bun + Elysia** for backend services and **Bun’s SQLite driver** for control-plane metadata.
+- Use **NATS JetStream** as the durable event data plane.
+- Use a **hybrid execution model**:
+  - First-party native runtime for core routing, transforms, retries, replay, and key connectors.
+  - Redpanda Connect as a **bootstrap adapter layer** for connectors that are not yet first-party.
+- v1 connector scope:
+  - Native first-party: HTTP in/out and NATS in/out.
+  - Bootstrap via adapter: Kafka in/out, Snowflake sink, BigQuery sink, S3 sink, and other commodity connectors.
+- Transformations in v1 are **DSL + fixed processors only**. No arbitrary user code.
+
+## Core Architecture
+
+- Create a new repo with Bun workspaces for:
+  - `console` — React/Vite/TanStack Router/Query UI
+  - `control-api` — Elysia API for auth, flows, revisions, deployments, secrets, runs, replay
+  - `runtime-manager` — reconciles desired state to workers and adapter instances
+  - `router-workers` — consumes from JetStream, executes FlowSpec processors, routes to sinks
+  - `adapter-redpanda` — manages Redpanda Connect-backed connector workloads
+  - `shared-flow-spec` — FlowSpec schemas, validation, compiler, simulator
+  - `deploy` — Docker Compose, Helm, install docs
+- Use **JetStream as the only event durability layer**. Define canonical streams for:
+  - `ingress`
+  - `work`
+  - `retry`
+  - `dlq`
+  - `audit`
+  - `replay`
+- Define a canonical internal message envelope with:
+  - `tenantId`
+  - `flowId`
+  - `revisionId`
+  - `messageId`
+  - `sourceRef`
+  - `partitionKey`
+  - `headers`
+  - `payload`
+  - `receivedAt`
+  - `traceId`
+- Use SQLite only for control-plane metadata:
+  - users
+  - API tokens
+  - tenants
+  - connectors
+  - secret references
+  - flow definitions
+  - revisions
+  - deployments
+  - bounded debug run summaries only
+  - aggregated runtime health summaries
+  - replay requests
+  - audit records
+
+## Flow Model and Runtime
+
+- Define a deterministic `FlowSpec v1` DSL that includes:
+  - source nodes
+  - processor nodes
+  - route predicates
+  - sink nodes
+  - retry policy
+  - DLQ policy
+  - batching policy
+  - idempotency strategy
+- Support only fixed processors in v1:
+  - `map`
+  - `filter`
+  - `branch`
+  - `template`
+  - `redact`
+  - `enrich_static`
+  - `batch`
+  - `retry`
+  - `rate_limit`
+  - `dedupe_window`
+- The AI authoring flow must be:
+  - prompt -> `FlowSpecDraft`
+  - schema validation
+  - sample-based simulation
+  - explicit publish
+- The runtime is the system of record for:
+  - routing
+  - retries
+  - DLQ creation
+  - replay
+  - rollout status
+  - revision activation
+- The dashboard primary use case is:
+  - mapping ingest sources through processors to output sinks
+  - showing instance and deployment health at a coarse operational level
+  - not replacing OTEL backends for telemetry exploration
+- Redpanda-backed connectors must be explicitly marked as adapter-executed so the compiler and UI can distinguish:
+  - native execution
+  - adapter execution
+
+## Public APIs and Interfaces
+
+- Expose REST APIs for:
+  - `POST /api/flows/draft-from-prompt`
+  - `POST /api/flows/validate`
+  - `POST /api/flows`
+  - `POST /api/flows/:id/publish`
+  - `POST /api/deployments/:id/rollback`
+  - `GET /api/runtime/stats`
+  - `POST /api/runtime/stats`
+  - `GET /api/runs`
+  - `GET /api/dlq`
+  - `POST /api/replays`
+  - `POST /api/connectors/test`
+  - `GET /api/capabilities`
+- Define shared types for:
+  - `FlowSpec`
+  - `FlowRevision`
+  - `ConnectorDefinition`
+  - `ConnectorCapability`
+  - `DeploymentRecord`
+  - `DeliveryAttempt`
+  - `ReplayRequest`
+  - `RuntimeTarget`
+- Require every sink to declare one of:
+  - `idempotent`
+  - `append_only`
+  - `best_effort`
+- Validate retry policies against sink mode so unsafe repeated writes are blocked for non-idempotent sinks.
+- Make delivery guarantees explicit in API and UI:
+  - **at-least-once only**
+  - ordering only per partition key
+  - duplicate delivery is possible and must be tolerated by sink strategy
+
+## Delivery Order
+
+- Phase 1:
+  - repo scaffolding
+  - Bun workspaces
+  - Elysia control API
+  - SQLite schema
+  - JetStream stream layout
+  - canonical message envelope
+  - auth and API tokens
+  - console shell
+  - `FlowSpec v1` schema and validator
+- Phase 2:
+  - native HTTP/NATS connectors
+  - router worker execution loop
+  - retry/DLQ/replay flows
+  - flow publish/rollback
+  - basic health summaries and bounded debug history
+- Phase 3:
+  - Redpanda adapter integration for Kafka, warehouse/object-storage sinks, and long-tail connectors
+  - capability registry
+  - mixed native + adapter execution
+  - managed Redpanda Connect workload execution and status reporting
+- Phase 4:
+  - production hardening for Snowflake, BigQuery, and S3 adapter manifests
+  - sink-specific batching and idempotency rules
+  - credential validation and operational runbooks for adapter-backed sinks
+- Phase 5:
+  - AI flow drafting
+  - simulation UX
+  - install assets
+  - hardening for beta
+- Phase 6:
+  - OTEL exporters for traces, metrics, and logs
+  - runtime-to-OTEL correlation for `traceId` and deployment identity
+  - dashboard refinement around transformation mapping and coarse health only
+
+## Test Plan
+
+- Unit-test:
+  - `FlowSpec` parsing and validation
+  - compiler output
+  - processor semantics
+  - retry policies
+  - idempotency-key generation
+  - capability-based validation
+- Integration-test:
+  - `HTTP -> NATS`
+  - `NATS -> Snowflake(adapter)`
+  - `Kafka(adapter) -> BigQuery(adapter)`
+  - `HTTP -> S3(adapter)`
+  - mixed native + adapter flows
+  - DLQ creation
+  - replay
+  - revision rollback
+- Failure-path integration tests:
+  - JetStream reconnect
+  - sink timeout
+  - adapter crash
+  - duplicate redelivery
+  - invalid credentials
+  - processor validation errors
+- End-to-end test:
+  - self-hosted install via Docker Compose
+  - create flow from prompt
+  - validate with sample payloads
+  - publish
+  - inspect runs
+  - force a failure
+  - replay from DLQ
+- Load-test:
+  - sustained throughput
+  - hot-partition pressure
+  - retry storms
+  - mixed native/adapter execution under backpressure
+
+## Assumptions and Defaults
+
+- v1 is a **single control-plane node** design. Control-plane HA is deferred.
+- JetStream clustering provides event durability and replay; SQLite is only for metadata.
+- SQLite uses **Bun’s built-in SQLite driver**. No Postgres dependency exists in v1.
+- Kafka, warehouse, and object-storage support are available in v1 through the adapter path first, not as first-party native connectors.
+- No arbitrary JS, WASM, or sandboxed user code is allowed in v1.
+- Auth in v1 is local admin bootstrap plus API tokens. External SSO/OIDC is deferred.
+- The initial packaging target is:
+  - Docker Compose for local/single-node installs
+  - Helm for production installs

@@ -1,0 +1,214 @@
+#!/bin/sh
+set -eu
+
+NATS_URL="${NATS_URL:-nats://nats:4222}"
+NATS_STREAM_INGRESS_MAX_AGE="${NATS_STREAM_INGRESS_MAX_AGE:-24h}"
+NATS_STREAM_INGRESS_MAX_BYTES="${NATS_STREAM_INGRESS_MAX_BYTES:-2GB}"
+NATS_STREAM_INGRESS_DISCARD="${NATS_STREAM_INGRESS_DISCARD:-new}"
+NATS_STREAM_WORK_MAX_AGE="${NATS_STREAM_WORK_MAX_AGE:-24h}"
+NATS_STREAM_WORK_MAX_BYTES="${NATS_STREAM_WORK_MAX_BYTES:-12GB}"
+NATS_STREAM_WORK_DISCARD="${NATS_STREAM_WORK_DISCARD:-new}"
+NATS_STREAM_RETRY_MAX_AGE="${NATS_STREAM_RETRY_MAX_AGE:-7d}"
+NATS_STREAM_RETRY_MAX_BYTES="${NATS_STREAM_RETRY_MAX_BYTES:-2GB}"
+NATS_STREAM_RETRY_DISCARD="${NATS_STREAM_RETRY_DISCARD:-new}"
+NATS_STREAM_DLQ_MAX_AGE="${NATS_STREAM_DLQ_MAX_AGE:-30d}"
+NATS_STREAM_DLQ_MAX_BYTES="${NATS_STREAM_DLQ_MAX_BYTES:-2GB}"
+NATS_STREAM_DLQ_DISCARD="${NATS_STREAM_DLQ_DISCARD:-old}"
+NATS_STREAM_AUDIT_MAX_AGE="${NATS_STREAM_AUDIT_MAX_AGE:-7d}"
+NATS_STREAM_AUDIT_MAX_BYTES="${NATS_STREAM_AUDIT_MAX_BYTES:-512MB}"
+NATS_STREAM_AUDIT_DISCARD="${NATS_STREAM_AUDIT_DISCARD:-old}"
+NATS_STREAM_REPLAY_MAX_AGE="${NATS_STREAM_REPLAY_MAX_AGE:-7d}"
+NATS_STREAM_REPLAY_MAX_BYTES="${NATS_STREAM_REPLAY_MAX_BYTES:-1GB}"
+NATS_STREAM_REPLAY_DISCARD="${NATS_STREAM_REPLAY_DISCARD:-new}"
+
+wait_for_nats() {
+  while ! nats --server "$NATS_URL" rtt >/dev/null 2>&1; do
+    sleep 1
+  done
+}
+
+stream_exists() {
+  stream_name="$1"
+
+  if nats --server "$NATS_URL" stream info "$stream_name" --no-select >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
+create_stream() {
+  stream_name="$1"
+  shift
+
+  echo "creating stream: $stream_name"
+  nats --server "$NATS_URL" stream add "$stream_name" --defaults "$@"
+}
+
+edit_stream() {
+  stream_name="$1"
+  shift
+
+  echo "updating stream: $stream_name"
+  nats --server "$NATS_URL" stream edit "$stream_name" --force "$@"
+}
+
+wait_for_nats
+
+if stream_exists ingress; then
+  edit_stream ingress \
+    --subjects "router.ingress.>" \
+    --ack \
+    --discard "$NATS_STREAM_INGRESS_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_INGRESS_MAX_BYTES" \
+    --max-age="$NATS_STREAM_INGRESS_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+else
+  create_stream ingress \
+    --subjects "router.ingress.>" \
+    --ack \
+    --storage file \
+    --retention work \
+    --discard "$NATS_STREAM_INGRESS_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_INGRESS_MAX_BYTES" \
+    --max-age="$NATS_STREAM_INGRESS_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+fi
+
+if stream_exists work; then
+  edit_stream work \
+    --subjects "router.work.>" \
+    --ack \
+    --discard "$NATS_STREAM_WORK_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_WORK_MAX_BYTES" \
+    --max-age="$NATS_STREAM_WORK_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+else
+  create_stream work \
+    --subjects "router.work.>" \
+    --ack \
+    --storage file \
+    --retention work \
+    --discard "$NATS_STREAM_WORK_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_WORK_MAX_BYTES" \
+    --max-age="$NATS_STREAM_WORK_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+fi
+
+if stream_exists retry; then
+  edit_stream retry \
+    --subjects "router.retry.>" \
+    --ack \
+    --discard "$NATS_STREAM_RETRY_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_RETRY_MAX_BYTES" \
+    --max-age="$NATS_STREAM_RETRY_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+else
+  create_stream retry \
+    --subjects "router.retry.>" \
+    --ack \
+    --storage file \
+    --retention work \
+    --discard "$NATS_STREAM_RETRY_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_RETRY_MAX_BYTES" \
+    --max-age="$NATS_STREAM_RETRY_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+fi
+
+if stream_exists dlq; then
+  edit_stream dlq \
+    --subjects "router.dlq.>" \
+    --ack \
+    --discard "$NATS_STREAM_DLQ_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_DLQ_MAX_BYTES" \
+    --max-age="$NATS_STREAM_DLQ_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+else
+  create_stream dlq \
+    --subjects "router.dlq.>" \
+    --ack \
+    --storage file \
+    --retention limits \
+    --discard "$NATS_STREAM_DLQ_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_DLQ_MAX_BYTES" \
+    --max-age="$NATS_STREAM_DLQ_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+fi
+
+if stream_exists audit; then
+  edit_stream audit \
+    --subjects "router.audit.>" \
+    --ack \
+    --discard "$NATS_STREAM_AUDIT_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_AUDIT_MAX_BYTES" \
+    --max-age="$NATS_STREAM_AUDIT_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+else
+  create_stream audit \
+    --subjects "router.audit.>" \
+    --ack \
+    --storage file \
+    --retention limits \
+    --discard "$NATS_STREAM_AUDIT_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_AUDIT_MAX_BYTES" \
+    --max-age="$NATS_STREAM_AUDIT_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+fi
+
+if stream_exists replay; then
+  edit_stream replay \
+    --subjects "router.replay.>" \
+    --ack \
+    --discard "$NATS_STREAM_REPLAY_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_REPLAY_MAX_BYTES" \
+    --max-age="$NATS_STREAM_REPLAY_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+else
+  create_stream replay \
+    --subjects "router.replay.>" \
+    --ack \
+    --storage file \
+    --retention work \
+    --discard "$NATS_STREAM_REPLAY_DISCARD" \
+    --max-msgs=-1 \
+    --max-bytes="$NATS_STREAM_REPLAY_MAX_BYTES" \
+    --max-age="$NATS_STREAM_REPLAY_MAX_AGE" \
+    --max-msg-size=-1 \
+    --dupe-window=2m \
+    --replicas 1
+fi
+
+echo "JetStream stream bootstrap complete."

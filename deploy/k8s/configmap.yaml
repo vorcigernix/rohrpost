@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rohrpost-config
+  labels:
+    app.kubernetes.io/part-of: rohrpost
+data:
+  DEFAULT_TENANT_ID: tenant_demo
+  DEFAULT_TENANT_NAME: Demo Tenant
+  BOOTSTRAP_ADMIN_EMAIL: admin@local.rohrpost
+  CONTROL_API_RUN_SUMMARY_RETENTION_LIMIT: "500"
+  NATS_URL: nats://nats:4222
+  ROUTER_RUN_HISTORY_LIMIT: "2000"
+  ROUTER_DLQ_HISTORY_LIMIT: "500"
+  ROUTER_METRICS_FLUSH_INTERVAL_MS: "2000"
+  ROUTER_BACKLOG_WARNING_THRESHOLD: "10000"
+  ROUTER_INGRESS_MAX_BUFFERED_PER_DEPLOYMENT: "2500"
+  ROUTER_INGRESS_MAX_BUFFERED_TOTAL: "10000"
+  ROUTER_INGRESS_RETRY_AFTER_MS: "1000"
+  ROUTER_PROCESSING_STALL_MS: "30000"
+  ROUTER_SINK_TARGETS_JSON: |
+    {
+      "http_out_default": {
+        "kind": "http",
+        "url": "http://http-counting-sink:4011/http-sink",
+        "method": "POST"
+      }
+    }
+  RUNTIME_MANAGER_REQUEST_TIMEOUT_MS: "3000"
+  MANIFEST_SOURCE: kubernetes
+  REDPANDA_CONNECT_IMAGE: docker.redpanda.com/redpandadata/connect:latest

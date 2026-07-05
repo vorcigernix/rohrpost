@@ -1,0 +1,21 @@
+{
+  "name": "@rohrpost/control-api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "test": "bun test",
+    "typecheck": "bunx tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@rohrpost/control-api-contracts": "workspace:*",
+    "@rohrpost/domain-connectors": "workspace:*",
+    "@rohrpost/shared-flow-spec": "workspace:*",
+    "elysia": "latest",
+    "jose": "^6.1.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "console",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": [
+        "run",
+        "dev:console"
+      ],
+      "port": 5173,
+      "autoPort": true
+    },
+    {
+      "name": "console-mock",
+      "runtimeExecutable": "/Users/vorcigernix/.bun/bin/bun",
+      "runtimeArgs": [
+        "run",
+        "--cwd",
+        "apps/console",
+        "dev"
+      ],
+      "port": 5173,
+      "env": {
+        "VITE_USE_MOCK_API": "true"
+      },
+      "autoPort": true
+    }
+  ]
+}

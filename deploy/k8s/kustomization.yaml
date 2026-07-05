@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rohrpost
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - nats.yaml
+  - nats-bootstrap-job.yaml
+  - control-api.yaml
+  - router-workers.yaml
+  - adapter-redpanda.yaml
+  - runtime-manager.yaml
+  - console.yaml
+  - http-counting-sink.yaml

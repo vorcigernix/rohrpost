@@ -1,0 +1,17 @@
+{
+  "name": "@rohrpost/router-workers",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "CONTROL_API_URL=${CONTROL_API_URL:-http://127.0.0.1:3001} CONTROL_API_TOKEN=${CONTROL_API_TOKEN:-dev-admin-token} bun run src/index.ts",
+    "start": "CONTROL_API_URL=${CONTROL_API_URL:-http://127.0.0.1:3001} CONTROL_API_TOKEN=${CONTROL_API_TOKEN:-dev-admin-token} bun run src/index.ts",
+    "test": "bun test",
+    "check": "bunx tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@rohrpost/control-api-contracts": "workspace:*",
+    "@rohrpost/shared-flow-spec": "workspace:*",
+    "nats": "latest"
+  }
+}
