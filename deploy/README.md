@@ -79,7 +79,7 @@ The important values are:
 
 ## NATS Streams
 
-The bootstrap script creates the canonical streams described in `PLAN.md`:
+The bootstrap script creates the canonical streams used by the runtime:
 
 - `router.ingress.>`
 - `router.work.>`

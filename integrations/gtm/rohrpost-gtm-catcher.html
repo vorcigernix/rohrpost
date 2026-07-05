@@ -1,0 +1,121 @@
+<script>
+(function (window) {
+  var config = window.rohrpostGtmCatcher || {};
+  var endpoint = config.endpoint;
+  var layerName = config.dataLayerName || "dataLayer";
+
+  if (!endpoint || window.__rohrpostGtmCatcherInstalled) return;
+  window.__rohrpostGtmCatcherInstalled = true;
+
+  var dataLayer = window[layerName] = window[layerName] || [];
+  var originalPush = dataLayer.push;
+  var queue = [];
+  var timer = null;
+  var sequence = 0;
+  var batchIntervalMs = typeof config.batchIntervalMs === "number" ? config.batchIntervalMs : 1000;
+  var maxBatchSize = typeof config.maxBatchSize === "number" ? config.maxBatchSize : 20;
+
+  function now() {
+    return new Date().toISOString();
+  }
+
+  function jsonSafe(value) {
+    try {
+      return JSON.parse(JSON.stringify(value));
+    } catch (error) {
+      return {
+        rohrpostUnserializable: true,
+        type: Object.prototype.toString.call(value)
+      };
+    }
+  }
+
+  function send(payload) {
+    var body = JSON.stringify(payload);
+
+    if (window.navigator && typeof window.navigator.sendBeacon === "function") {
+      try {
+        var beaconBody = typeof window.Blob === "function"
+          ? new window.Blob([body], { type: "text/plain" })
+          : body;
+        if (window.navigator.sendBeacon(endpoint, beaconBody)) return;
+      } catch (error) {
+        // Fall through to fetch.
+      }
+    }
+
+    if (typeof window.fetch === "function") {
+      try {
+        window.fetch(endpoint, {
+          method: "POST",
+          body: body,
+          keepalive: true,
+          mode: "no-cors",
+          credentials: "omit"
+        });
+      } catch (error) {
+        // Analytics mirroring must never break the page.
+      }
+    }
+  }
+
+  function flush() {
+    var events = queue.splice(0, queue.length);
+    timer = null;
+    if (!events.length) return;
+
+    send({
+      source: "gtm.dataLayer",
+      sentAt: now(),
+      page: {
+        url: window.location && window.location.href,
+        title: window.document && window.document.title,
+        referrer: window.document && window.document.referrer
+      },
+      events: events
+    });
+  }
+
+  function scheduleFlush() {
+    if (queue.length >= maxBatchSize) {
+      if (timer) window.clearTimeout(timer);
+      flush();
+      return;
+    }
+
+    if (!timer) {
+      timer = window.setTimeout(flush, batchIntervalMs);
+    }
+  }
+
+  function capture(item, origin) {
+    queue.push({
+      sequence: ++sequence,
+      observedAt: now(),
+      origin: origin,
+      item: jsonSafe(item)
+    });
+    scheduleFlush();
+  }
+
+  dataLayer.push = function () {
+    var result = originalPush.apply(dataLayer, arguments);
+    for (var index = 0; index < arguments.length; index += 1) {
+      capture(arguments[index], "push");
+    }
+    return result;
+  };
+
+  if (config.includeExisting !== false) {
+    for (var index = 0; index < dataLayer.length; index += 1) {
+      capture(dataLayer[index], "initial");
+    }
+  }
+
+  if (window.document && typeof window.document.addEventListener === "function") {
+    window.document.addEventListener("visibilitychange", function () {
+      if (window.document.visibilityState === "hidden") flush();
+    });
+  }
+})(window);
+</script>
