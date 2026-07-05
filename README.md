@@ -69,12 +69,17 @@ In Compose, `router-workers` is internal. Use the Kubernetes port-forward helper
 
 ## Local Kubernetes
 
-For a closer deployment shape, use the bundled Kubernetes manifests with kind or Docker Desktop Kubernetes:
+For a closer deployment shape, use the bundled Kubernetes manifests with Docker, kind, kubectl, and Bun:
 
 ```bash
-bun run k8s:deploy
+kind create cluster --name rohrpost
+K8S_CONTEXT=kind-rohrpost bun run k8s:deploy
 bun run k8s:port-forward
 ```
+
+`bun run k8s:deploy` runs [deploy/bin/k8s-deploy.sh](deploy/bin/k8s-deploy.sh). It builds local images, loads them into kind when the active context is `kind-*`, applies [deploy/k8s](deploy/k8s), bootstraps NATS JetStream, and waits for the stack.
+
+`bun run k8s:port-forward` runs [deploy/bin/k8s-port-forward.sh](deploy/bin/k8s-port-forward.sh). Keep it open while testing; it creates the stable localhost ports below.
 
 The port-forward helper exposes:
 
