@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Rohrpost - governed event routing</title>
+    <meta
+      name="description"
+      content="Rohrpost is an open-source control plane for versioned FlowSpecs, durable event routing, replay, and audit on a NATS JetStream runtime."
+    >
+    <link rel="icon" href="./assets/brand/favicon.svg" type="image/svg+xml">
+    <style>
+      :root {
+        color-scheme: dark;
+        --body: #101207;
+        --surface: #1b1c15;
+        --surface-2: #23251c;
+        --surface-3: #30312a;
+        --muted: #e2e3da1f;
+        --border: #f0f2e81f;
+        --border-strong: #707e46;
+        --text: #e2e3da;
+        --text-2: #aaad9e;
+        --text-3: #7d8172;
+        --accent: #bbcf74;
+        --accent-2: #7a9c30;
+        --cyan: #70c4c4;
+        --blue: #7ba8d4;
+        --orange: #d4903a;
+        --pink: #e07a9a;
+        --green: #6dbf2a;
+        --red: #ff5c5c;
+        --shadow: 0 18px 52px #00000059;
+        --sans: Inter, "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --mono: "JetBrains Mono", "SF Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+        letter-spacing: 0;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--body);
+        color: var(--text);
+        font-family: var(--sans);
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        z-index: -2;
+        background:
+          linear-gradient(#ffffff05 1px, transparent 1px),
+          linear-gradient(90deg, #ffffff05 1px, transparent 1px),
+          var(--body);
+        background-size: 40px 40px;
+      }
+
+      body::after {
+        content: "";
+        position: fixed;
+        left: 0;
+        right: 0;
+        top: 0;
+        height: 300px;
+        z-index: -1;
+        background: url("./assets/brand/bg-line.svg") center top / 1600px auto no-repeat;
+        color: #bbcf741a;
+        opacity: 0.45;
+        pointer-events: none;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      code,
+      pre,
+      .mono {
+        font-family: var(--mono);
+      }
+
+      .wrap {
+        width: min(1160px, calc(100% - 32px));
+        margin: 0 auto;
+      }
+
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        border-bottom: 1px solid var(--border);
+        background: #101207e6;
+        backdrop-filter: blur(14px);
+      }
+
+      .nav {
+        min-height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+      }
+
+      .brand-mark {
+        width: 24px;
+        height: 24px;
+        color: var(--accent);
+        flex: 0 0 auto;
+        transform: scaleX(-1);
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        color: var(--text-2);
+        font-size: 14px;
+      }
+
+      .nav-links a:hover {
+        color: var(--text);
+      }
+
+      .button {
+        display: inline-flex;
+        min-height: 38px;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        border: 1px solid var(--border-strong);
+        border-radius: 6px;
+        padding: 8px 13px;
+        background: var(--accent);
+        color: #233700;
+        font-weight: 700;
+        line-height: 1.2;
+        white-space: nowrap;
+      }
+
+      .button.secondary {
+        background: transparent;
+        border-color: var(--border);
+        color: var(--text);
+      }
+
+      .button:hover {
+        filter: brightness(1.08);
+      }
+
+      .hero {
+        padding: 76px 0 34px;
+      }
+
+      .hero-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+        gap: 32px;
+        align-items: center;
+      }
+
+      .eyebrow {
+        margin: 0 0 14px;
+        color: var(--accent);
+        font: 700 13px/1.4 var(--mono);
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        max-width: 12ch;
+        margin-bottom: 18px;
+        font-size: 58px;
+        line-height: 1.02;
+      }
+
+      .lead {
+        max-width: 66ch;
+        color: var(--text-2);
+        font-size: 18px;
+      }
+
+      .cta-row,
+      .chip-row,
+      .port-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .cta-row {
+        margin-top: 28px;
+        gap: 10px;
+      }
+
+      .chip-row {
+        margin-top: 20px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 4px 8px;
+        background: var(--surface);
+        color: var(--text-2);
+        font: 600 12px/1.3 var(--mono);
+      }
+
+      .console-frame {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #15170f;
+        box-shadow: var(--shadow);
+        overflow: hidden;
+      }
+
+      .console-top {
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--border);
+        padding: 0 14px;
+        background: var(--surface);
+        color: var(--text-2);
+        font: 600 12px/1.3 var(--mono);
+      }
+
+      .window-dots {
+        display: flex;
+        gap: 6px;
+      }
+
+      .window-dots span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-3);
+      }
+
+      .console-body {
+        padding: 18px;
+      }
+
+      .topology {
+        display: grid;
+        gap: 10px;
+      }
+
+      .topology-row {
+        display: grid;
+        grid-template-columns: 116px minmax(0, 1fr) 88px;
+        gap: 10px;
+        align-items: center;
+      }
+
+      .node {
+        min-height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px;
+        background: var(--surface-2);
+      }
+
+      .node strong {
+        display: block;
+        color: var(--text);
+        font-size: 14px;
+      }
+
+      .node small {
+        display: block;
+        color: var(--text-3);
+        font: 500 12px/1.35 var(--mono);
+      }
+
+      .label {
+        color: var(--text-3);
+        font: 700 12px/1.35 var(--mono);
+      }
+
+      .badge {
+        border-radius: 4px;
+        padding: 3px 6px;
+        font: 700 11px/1.2 var(--mono);
+      }
+
+      .badge.http { background: #70c4c41f; color: var(--cyan); }
+      .badge.spec { background: #bbcf7424; color: var(--accent); }
+      .badge.js { background: #7ba8d424; color: var(--blue); }
+      .badge.sink { background: #d4903a24; color: var(--orange); }
+
+      .log {
+        margin: 18px 0 0;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #0d0f08;
+        padding: 12px;
+        overflow-x: auto;
+        color: var(--text-2);
+        font: 500 12px/1.7 var(--mono);
+      }
+
+      .log .ok { color: var(--green); }
+      .log .warn { color: var(--orange); }
+      .log .dim { color: var(--text-3); }
+
+      .metric-strip {
+        padding: 18px 0 42px;
+      }
+
+      .metrics {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: #1b1c15cc;
+        overflow: hidden;
+      }
+
+      .metric {
+        min-height: 118px;
+        border-right: 1px solid var(--border);
+        padding: 16px;
+      }
+
+      .metric:last-child {
+        border-right: 0;
+      }
+
+      .metric strong {
+        display: block;
+        margin-bottom: 8px;
+        color: var(--text);
+        font-size: 16px;
+      }
+
+      .metric span {
+        color: var(--text-2);
+        font-size: 14px;
+      }
+
+      .band {
+        border-top: 1px solid var(--border);
+        padding: 58px 0;
+      }
+
+      .band.alt {
+        background: #1b1c154d;
+      }
+
+      .section-head {
+        display: grid;
+        grid-template-columns: minmax(0, 0.72fr) minmax(300px, 0.58fr);
+        gap: 28px;
+        align-items: end;
+        margin-bottom: 24px;
+      }
+
+      h2 {
+        margin-bottom: 10px;
+        font-size: 34px;
+        line-height: 1.12;
+      }
+
+      .section-head p,
+      .muted {
+        color: var(--text-2);
+      }
+
+      .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .feature {
+        min-height: 184px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 16px;
+      }
+
+      .feature h3 {
+        margin-bottom: 8px;
+        font-size: 18px;
+      }
+
+      .feature p {
+        color: var(--text-2);
+        font-size: 14px;
+      }
+
+      .feature .tag {
+        display: inline-block;
+        margin-bottom: 14px;
+        color: var(--accent);
+        font: 700 12px/1.2 var(--mono);
+      }
+
+      .architecture {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(360px, 0.78fr);
+        gap: 18px;
+        align-items: start;
+      }
+
+      .flow-panel,
+      .code-panel,
+      .matrix-wrap {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        overflow: hidden;
+      }
+
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid var(--border);
+        padding: 12px 14px;
+        color: var(--text-2);
+        font: 700 12px/1.3 var(--mono);
+      }
+
+      .lane {
+        display: grid;
+        grid-template-columns: 132px minmax(0, 1fr);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .lane:last-child {
+        border-bottom: 0;
+      }
+
+      .lane-label {
+        border-right: 1px solid var(--border);
+        padding: 14px;
+        color: var(--text-3);
+        font: 700 12px/1.3 var(--mono);
+      }
+
+      .lane-content {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 12px;
+      }
+
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 5px 8px;
+        color: var(--text-2);
+        background: #101207;
+        font: 600 12px/1.3 var(--mono);
+      }
+
+      .callouts {
+        display: grid;
+        gap: 10px;
+      }
+
+      .callout {
+        border-left: 3px solid var(--accent);
+        background: var(--surface);
+        padding: 12px 14px;
+      }
+
+      .callout strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .callout span {
+        color: var(--text-2);
+        font-size: 14px;
+      }
+
+      pre {
+        margin: 0;
+        padding: 16px;
+        overflow-x: auto;
+        color: var(--text-2);
+        background: #0d0f08;
+        font-size: 13px;
+        line-height: 1.7;
+      }
+
+      pre .k { color: var(--accent); }
+      pre .s { color: var(--cyan); }
+      pre .n { color: var(--orange); }
+      pre .c { color: var(--text-3); }
+
+      .quickstart {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(320px, 0.64fr);
+        gap: 16px;
+        align-items: stretch;
+      }
+
+      .ports {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--surface);
+        padding: 16px;
+      }
+
+      .ports h3 {
+        margin-bottom: 10px;
+        font-size: 18px;
+      }
+
+      .port {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        width: 100%;
+        border-bottom: 1px solid var(--border);
+        padding: 8px 0;
+        color: var(--text-2);
+        font-size: 14px;
+      }
+
+      .port:last-child {
+        border-bottom: 0;
+      }
+
+      .port code {
+        color: var(--text);
+        white-space: nowrap;
+      }
+
+      table {
+        width: 100%;
+        min-width: 760px;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid var(--border);
+        padding: 14px;
+        text-align: left;
+        vertical-align: top;
+        font-size: 14px;
+      }
+
+      th {
+        color: var(--text-3);
+        font: 700 12px/1.3 var(--mono);
+      }
+
+      td {
+        color: var(--text-2);
+      }
+
+      td strong {
+        color: var(--text);
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .footer {
+        border-top: 1px solid var(--border);
+        padding: 26px 0;
+        color: var(--text-3);
+        font-size: 14px;
+      }
+
+      .footer .wrap {
+        display: flex;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+
+      .footer a {
+        color: var(--text);
+      }
+
+      @media (max-width: 940px) {
+        .hero-grid,
+        .section-head,
+        .architecture,
+        .quickstart {
+          grid-template-columns: 1fr;
+        }
+
+        .hero {
+          padding-top: 52px;
+        }
+
+        h1 {
+          max-width: 14ch;
+          font-size: 44px;
+        }
+
+        .feature-grid,
+        .metrics {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .metric:nth-child(2) {
+          border-right: 0;
+        }
+
+        .metric:nth-child(-n + 2) {
+          border-bottom: 1px solid var(--border);
+        }
+      }
+
+      @media (max-width: 680px) {
+        .wrap {
+          width: min(100% - 24px, 1160px);
+        }
+
+        .nav {
+          min-height: auto;
+          padding: 12px 0;
+          align-items: flex-start;
+        }
+
+        .nav-links {
+          display: none;
+        }
+
+        h1 {
+          font-size: 36px;
+        }
+
+        h2 {
+          font-size: 28px;
+        }
+
+        .lead {
+          font-size: 16px;
+        }
+
+        .topology-row,
+        .lane {
+          grid-template-columns: 1fr;
+        }
+
+        .lane-label {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+          padding-bottom: 8px;
+        }
+
+        .topology-row .label {
+          padding-top: 4px;
+        }
+
+        .metrics,
+        .feature-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .metric,
+        .metric:nth-child(2) {
+          border-right: 0;
+          border-bottom: 1px solid var(--border);
+        }
+
+        .metric:last-child {
+          border-bottom: 0;
+        }
+
+        .button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="wrap nav">
+        <a class="brand" href="#" aria-label="Rohrpost home">
+          <svg class="brand-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 16 V7 Q4 4 7 4 H17 Q20 4 20 7 V17 Q20 20 17 20 H11 Q8 20 8 17 V13 Q8 10 11 10 H12.5"></path>
+            <rect x="14.8" y="8.9" width="3.4" height="2.2" rx="1.1" fill="currentColor" stroke="none"></rect>
+          </svg>
+          <span>Rohrpost</span>
+        </a>
+        <nav class="nav-links" aria-label="Primary navigation">
+          <a href="#architecture">Architecture</a>
+          <a href="#test-drive">Test drive</a>
+          <a href="#positioning">Positioning</a>
+          <a class="button secondary" href="https://github.com/vorcigernix/rohrpost">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="wrap hero-grid">
+          <div>
+            <p class="eyebrow">Open-source event routing control plane</p>
+            <h1 id="hero-title">Rohrpost makes event routes deployable.</h1>
+            <p class="lead">
+              Use Rohrpost when raw website, webhook, NATS, or Kafka-style events need to become governed routes instead of one-off connector glue. FlowSpecs are versioned API objects, deployments are observable, and replay runs through durable NATS JetStream streams.
+            </p>
+            <div class="cta-row" aria-label="Primary actions">
+              <a class="button" href="https://github.com/vorcigernix/rohrpost">View GitHub</a>
+              <a class="button secondary" href="#test-drive">Run local test drive</a>
+            </div>
+            <div class="chip-row" aria-label="Technical properties">
+              <span class="chip">FlowSpec v1</span>
+              <span class="chip">NATS JetStream</span>
+              <span class="chip">REST control API</span>
+              <span class="chip">console UI</span>
+              <span class="chip">skills.sh ready</span>
+            </div>
+          </div>
+
+          <aside class="console-frame" aria-label="Rohrpost console inspired topology preview">
+            <div class="console-top">
+              <div class="window-dots" aria-hidden="true"><span></span><span></span><span></span></div>
+              <span>tenant_demo / rev_3d16 / active</span>
+            </div>
+            <div class="console-body">
+              <div class="topology" aria-label="Event route topology">
+                <div class="topology-row">
+                  <span class="label">source</span>
+                  <div class="node">
+                    <span><strong>HTTP /ingest/storefront</strong><small>GTM dataLayer, webhook, app event</small></span>
+                    <span class="badge http">native</span>
+                  </div>
+                  <span class="label">ingress</span>
+                </div>
+                <div class="topology-row">
+                  <span class="label">spec</span>
+                  <div class="node">
+                    <span><strong>filter -> map -> enrich_static</strong><small>validated FlowSpec, compiled before publish</small></span>
+                    <span class="badge spec">rev</span>
+                  </div>
+                  <span class="label">deploy</span>
+                </div>
+                <div class="topology-row">
+                  <span class="label">durability</span>
+                  <div class="node">
+                    <span><strong>router.work.&gt; / router.retry.&gt; / router.replay.&gt;</strong><small>file-backed JetStream streams</small></span>
+                    <span class="badge js">ack</span>
+                  </div>
+                  <span class="label">replay</span>
+                </div>
+                <div class="topology-row">
+                  <span class="label">sink</span>
+                  <div class="node">
+                    <span><strong>HTTP, NATS, adapter-managed targets</strong><small>idempotent retries where the sink contract allows</small></span>
+                    <span class="badge sink">route</span>
+                  </div>
+                  <span class="label">audit</span>
+                </div>
+              </div>
+              <pre class="log" aria-label="Runtime log excerpt"><span class="dim">$</span> rohrpost publish flow_demo_http --revision rev_3d16
+<span class="ok">control-api</span>   revision stored, deployment activated
+<span class="ok">router</span>        source accepted, route matched purchases_to_object_store
+<span class="warn">jetstream</span>     pending=0 retry=0 replay=ready dlq=0</pre>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="metric-strip" aria-label="Rohrpost operating model">
+        <div class="wrap metrics">
+          <div class="metric">
+            <strong>Author</strong>
+            <span>Draft flows through the console, REST API, or the installable skills.sh agent skill.</span>
+          </div>
+          <div class="metric">
+            <strong>Deploy</strong>
+            <span>Publish immutable revisions and keep deployment state separate from draft editing.</span>
+          </div>
+          <div class="metric">
+            <strong>Operate</strong>
+            <span>Route with explicit at-least-once semantics, per-partition ordering, and bounded retries.</span>
+          </div>
+          <div class="metric">
+            <strong>Recover</strong>
+            <span>Replay from durable work streams and preserve audit records for runtime inspection.</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="band alt" id="architecture" aria-labelledby="architecture-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Control plane plus runtime plane</p>
+              <h2 id="architecture-title">The runtime is intentionally bare. The control model is the product.</h2>
+            </div>
+            <p>
+              Connector engines are not scarce. The useful gap is making routes inspectable, versioned, replayable, and automatable without turning every team into data-platform operators.
+            </p>
+          </div>
+
+          <div class="architecture">
+            <div class="flow-panel">
+              <div class="panel-head">
+                <span>runtime topology</span>
+                <span>self-hosted</span>
+              </div>
+              <div class="lane">
+                <div class="lane-label">control plane</div>
+                <div class="lane-content">
+                  <span class="pill">console</span>
+                  <span class="pill">control-api</span>
+                  <span class="pill">SQLite state</span>
+                  <span class="pill">runtime-manager</span>
+                </div>
+              </div>
+              <div class="lane">
+                <div class="lane-label">broker</div>
+                <div class="lane-content">
+                  <span class="pill">NATS subjects</span>
+                  <span class="pill">JetStream ingress</span>
+                  <span class="pill">JetStream work</span>
+                  <span class="pill">retry / replay / dlq / audit</span>
+                </div>
+              </div>
+              <div class="lane">
+                <div class="lane-label">runtime plane</div>
+                <div class="lane-content">
+                  <span class="pill">router-workers</span>
+                  <span class="pill">HTTP ingress</span>
+                  <span class="pill">native NATS sinks</span>
+                  <span class="pill">adapter-redpanda</span>
+                </div>
+              </div>
+              <div class="lane">
+                <div class="lane-label">interfaces</div>
+                <div class="lane-content">
+                  <span class="pill">REST contracts</span>
+                  <span class="pill">FlowSpec validation</span>
+                  <span class="pill">LLM draft assist</span>
+                  <span class="pill">GTM catcher</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="callouts">
+              <div class="callout">
+                <strong>FlowSpecs are API objects.</strong>
+                <span>Sources, processors, routes, sinks, retry policy, DLQ policy, batching, and idempotency are explicit in a typed spec.</span>
+              </div>
+              <div class="callout">
+                <strong>Deployments are separate from drafts.</strong>
+                <span>A route can be drafted, validated, saved, published, rolled forward, or inspected without editing runtime code.</span>
+              </div>
+              <div class="callout">
+                <strong>Replay is part of operations.</strong>
+                <span>Accepted work is written through JetStream subjects, so retries and replay requests use the same runtime lane.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="band" aria-labelledby="primitives-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Useful primitives</p>
+              <h2 id="primitives-title">Built for teams that want routes as infrastructure, not screenshots.</h2>
+            </div>
+            <p>
+              The first iteration focuses on the behaviors technical users look for before trusting an event route: reproducible setup, known contracts, and enough operational surface to debug failure.
+            </p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature">
+              <span class="tag">01 / authoring</span>
+              <h3>Prompt to FlowSpec</h3>
+              <p>Use the control API to draft a candidate flow from a natural-language request and sample payload, then validate it before saving or publishing.</p>
+            </article>
+            <article class="feature">
+              <span class="tag">02 / ingress</span>
+              <h3>Website event capture</h3>
+              <p>A GTM Custom HTML snippet can mirror controlled <code>dataLayer.push(...)</code> events into a configured Rohrpost HTTP ingress endpoint.</p>
+            </article>
+            <article class="feature">
+              <span class="tag">03 / semantics</span>
+              <h3>Explicit delivery tradeoffs</h3>
+              <p>The runtime states at-least-once delivery, possible duplicates, per-partition ordering only, and retries only for idempotent sinks.</p>
+            </article>
+            <article class="feature">
+              <span class="tag">04 / replay</span>
+              <h3>Durable work streams</h3>
+              <p>Ingress, work, retry, replay, DLQ, and audit traffic use named JetStream streams with bounded retention and backpressure.</p>
+            </article>
+            <article class="feature">
+              <span class="tag">05 / ops</span>
+              <h3>Known local ports</h3>
+              <p>The Kubernetes port-forward helper gives agents and humans stable localhost endpoints for the console, API, router, adapters, and runtime manager.</p>
+            </article>
+            <article class="feature">
+              <span class="tag">06 / install</span>
+              <h3>Agent test drive</h3>
+              <p>The skills.sh package teaches an agent how to bootstrap Docker plus kind, deploy the stack, and create flows through the API.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="band alt" id="test-drive" aria-labelledby="test-drive-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Local test drive</p>
+              <h2 id="test-drive-title">Start with the same ports every time.</h2>
+            </div>
+            <p>
+              Use the agent shortcut if your environment supports skills.sh. Use the manual kind path when you want to see each moving part yourself.
+            </p>
+          </div>
+
+          <div class="quickstart">
+            <div class="code-panel">
+              <div class="panel-head">
+                <span>terminal</span>
+                <span>Docker + kind + Bun</span>
+              </div>
+              <pre><span class="c"># Agent shortcut</span>
+<span class="k">npx</span> skills add vorcigernix/rohrpost --skill rohrpost
+
+<span class="c"># Manual local Kubernetes path</span>
+<span class="k">bun</span> install
+<span class="k">kind</span> create cluster --name rohrpost
+<span class="k">K8S_CONTEXT</span>=kind-rohrpost <span class="k">bun</span> run k8s:deploy
+<span class="k">bun</span> run k8s:port-forward
+
+<span class="c"># Then open the console</span>
+<span class="s">http://127.0.0.1:3000</span></pre>
+            </div>
+
+            <div class="ports">
+              <h3>Forwarded endpoints</h3>
+              <div class="port"><span>console</span><code>127.0.0.1:3000</code></div>
+              <div class="port"><span>control-api</span><code>127.0.0.1:3001</code></div>
+              <div class="port"><span>router-workers</span><code>127.0.0.1:3002</code></div>
+              <div class="port"><span>adapter-redpanda</span><code>127.0.0.1:3003</code></div>
+              <div class="port"><span>runtime-manager</span><code>127.0.0.1:7102</code></div>
+              <p class="muted">
+                The helper script keeps these port forwards open, which makes follow-up automation predictable.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="band" id="positioning" aria-labelledby="positioning-title">
+        <div class="wrap">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Where it fits</p>
+              <h2 id="positioning-title">Rohrpost is not trying to be the whole data platform.</h2>
+            </div>
+            <p>
+              It is closest to a governed routing layer for product and website events: lightweight enough to self-host, explicit enough to test, and open enough to automate from outside the UI.
+            </p>
+          </div>
+
+          <div class="matrix-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Neighbor</th>
+                  <th>Good at</th>
+                  <th>Rohrpost angle</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><strong>Redpanda Connect / Benthos</strong></td>
+                  <td>Declarative stream processing with a broad connector catalog.</td>
+                  <td>Rohrpost leans into versioned flow objects, deployment state, replay, audit, and console/API operation around a durable runtime.</td>
+                </tr>
+                <tr>
+                  <td><strong>Apache NiFi</strong></td>
+                  <td>Large visual dataflow platform with mature operational concepts.</td>
+                  <td>Rohrpost aims for a smaller self-hosted control API plus FlowSpec model, better suited to route automation and agent-driven setup.</td>
+                </tr>
+                <tr>
+                  <td><strong>Synadia Connect</strong></td>
+                  <td>NATS-native inlets and outlets for point-to-point movement.</td>
+                  <td>Rohrpost adds multi-step route authoring, revisioned deployment, and runtime inspection as first-class product surfaces.</td>
+                </tr>
+                <tr>
+                  <td><strong>Vector, CDP, webhook tools</strong></td>
+                  <td>Specific domains such as observability pipelines, customer data collection, or webhook delivery.</td>
+                  <td>Rohrpost treats event routes as governed infrastructure that can start from GTM or HTTP ingress and end in owned sinks.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="wrap">
+        <span>Rohrpost is open source and self-hosted.</span>
+        <a href="https://github.com/vorcigernix/rohrpost">github.com/vorcigernix/rohrpost</a>
+      </div>
+    </footer>
+  </body>
+</html>
